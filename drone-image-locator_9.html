@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NorthBound Image Locator · by NoboDrone</title>
+
+<!-- OpenLayers -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
+<script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+:root {
+  --bg:#0d0f14; --surface:#161a23; --surface2:#1e2430; --border:#2a3040;
+  --accent:#00e5a0; --warn:#ff6b35; --text:#e8ecf4; --muted:#7a8499;
+  --mono:'Space Mono',monospace; --sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans)}
+
+/* ── HEADER ── */
+header{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 14px;background:var(--surface);
+  border-bottom:1px solid var(--border);flex-shrink:0;
+  height:48px;
+}
+.logo{display:flex;align-items:center;gap:9px;white-space:nowrap}
+.logo-text{display:flex;flex-direction:column;gap:1px}
+.logo-title{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.04em}
+.logo-title em{color:var(--accent);font-style:normal}
+.logo-sub{font-size:9px;color:var(--muted);font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.stats{display:flex;gap:14px;margin-left:auto;align-items:center}
+.stat{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.stat b{color:var(--accent)}
+.stat.w b{color:var(--warn)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:5px;border:none;cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:500;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#000}.btn-primary:hover{background:#00c988}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn-ghost:hover{background:var(--border)}
+.btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
+.btn-group{display:flex;gap:4px}
+
+/* ── LAYOUT ── */
+.app{display:flex;height:calc(100vh - 48px)}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:290px;min-width:290px;background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sb-head{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.sb-head h3{font-size:9px;font-family:var(--mono);color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:7px}
+.sb-head input{
+  width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:4px;padding:5px 8px;color:var(--text);font-size:11px;outline:none;
+}
+.sb-head input:focus{border-color:var(--accent)}
+.photo-list{flex:1;overflow-y:auto;padding:3px 0}
+.photo-list::-webkit-scrollbar{width:3px}
+.photo-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.pitem{
+  display:flex;align-items:center;gap:8px;padding:6px 11px;
+  cursor:pointer;transition:background .1s;border-left:2px solid transparent;
+}
+.pitem:hover{background:var(--surface2)}
+.pitem.sel{background:var(--surface2);border-left-color:var(--accent)}
+.pitem.nogps{opacity:.4}
+.thumb{width:36px;height:36px;border-radius:3px;object-fit:cover;background:var(--bg);border:1px solid var(--border);flex-shrink:0}
+.pi{flex:1;min-width:0}
+.pn{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px}
+.pc{font-size:9px;font-family:var(--mono);color:var(--muted)}
+.badge{font-size:8px;font-family:var(--mono);padding:2px 4px;border-radius:3px;flex-shrink:0;font-weight:700}
+.badge.ok{background:rgba(0,229,160,.12);color:var(--accent)}
+.badge.no{background:rgba(255,107,53,.12);color:var(--warn)}
+.empty{padding:18px;text-align:center;color:var(--muted);font-size:11px;line-height:1.6}
+
+/* ── MAP ── */
+.map-wrap{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+
+/* OpenLayers overrides */
+.ol-zoom{top:10px!important;right:10px!important;left:auto!important}
+.ol-zoom button{background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--border)!important;font-size:16px!important;width:28px!important;height:28px!important}
+.ol-zoom button:hover{background:var(--surface2)!important}
+.ol-attribution{background:rgba(13,15,20,0.7)!important;color:var(--muted)!important;font-size:9px!important}
+.ol-attribution a{color:var(--muted)!important}
+
+/* ── DROP OVERLAY ── */
+#dropOverlay{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;z-index:100;
+  background:rgba(13,15,20,0.92);transition:opacity .2s;
+}
+#dropOverlay.gone{opacity:0;pointer-events:none}
+#dropOverlay.drag .dicon{border-color:var(--accent);color:var(--accent)}
+.dicon{width:68px;height:68px;border:2px dashed var(--border);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .2s}
+.dtitle{font-size:16px;font-weight:600}
+.dsub{font-size:11px;color:var(--muted);text-align:center;line-height:1.6;max-width:260px}
+
+/* ── LAYER SWITCHER ── */
+#layerSw{
+  position:absolute;top:10px;left:10px;z-index:50;
+  display:flex;gap:4px;
+}
+.lbtn{
+  padding:5px 10px;font-size:10px;font-family:var(--mono);
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:4px;cursor:pointer;color:var(--muted);transition:all .15s;
+}
+.lbtn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.lbtn:hover:not(.active){background:var(--surface2);color:var(--text)}
+
+/* ── POPUP ── */
+#popup{
+  position:absolute;background:var(--surface);border:1px solid var(--border);
+  border-radius:7px;overflow:hidden;width:190px;z-index:200;
+  box-shadow:0 8px 28px rgba(0,0,0,.55);display:none;
+}
+#popup img{width:100%;height:110px;object-fit:cover;display:block}
+.pop-info{padding:8px 10px}
+.pop-name{font-size:11px;font-weight:600;margin-bottom:5px;word-break:break-all}
+.pop-row{display:flex;justify-content:space-between;font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:2px}
+.pop-row span:last-child{color:var(--text)}
+#popClose{position:absolute;top:5px;right:5px;width:19px;height:19px;background:rgba(0,0,0,.6);border:none;border-radius:3px;cursor:pointer;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center}
+
+/* ── PROGRESS ── */
+#prog{position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--border);z-index:300;display:none}
+#progfill{height:100%;background:var(--accent);width:0%;transition:width .12s}
+
+/* ── TOAST ── */
+#toast{
+  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  padding:8px 16px;font-size:12px;z-index:400;opacity:0;
+  transition:opacity .2s;pointer-events:none;white-space:nowrap;
+}
+#toast.show{opacity:1}
+
+#fi{display:none}
+</style>
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+  <div class="logo-text">
+      <span class="logo-title">NorthBound <em>Image</em> Locator</span>
+      <span class="logo-sub">by NoboDrone</span>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat">Fotos <b id="sTotal">0</b></div>
+    <div class="stat">GPS <b id="sGps">0</b></div>
+    <div class="stat w">Sin GPS <b id="sNoGps">0</b></div>
+  </div>
+  <button class="btn btn-ghost" onclick="document.getElementById('fi').click()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Añadir fotos
+  </button>
+  <div class="btn-group">
+    <button class="btn btn-primary" id="btnKml" disabled onclick="exportKML()">↓ KML</button>
+    <button class="btn btn-ghost" id="btnCsv" disabled onclick="exportCSV()">↓ CSV</button>
+  </div>
+  <button class="btn btn-ghost" id="btnClear" style="display:none" onclick="clearAll()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+    Limpiar
+  </button>
+</header>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="sb-head">
+      <h3>Imágenes cargadas</h3>
+      <input id="filterInput" type="text" placeholder="Filtrar por nombre..." oninput="filterList(this.value)">
+    </div>
+    <div class="photo-list" id="photoList">
+      <div class="empty">Arrastra fotos JPG al mapa<br>o usa "Añadir fotos"</div>
+    </div>
+  </div>
+
+  <div class="map-wrap" id="mapWrap">
+    <div id="map"></div>
+
+    <div id="dropOverlay">
+      <div class="dicon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="dtitle">NorthBound Image Locator</div>
+      <div class="dsub">JPG/JPEG con metadatos GPS EXIF<br>Carga masiva compatible con DJI</div>
+      <button class="btn btn-primary" onclick="document.getElementById('fi').click()">Seleccionar imágenes</button>
+    </div>
+
+    <div id="layerSw">
+      <div class="lbtn" id="lSat" onclick="setLayer('sat')">Satélite</div>
+      <div class="lbtn active" id="lOsm" onclick="setLayer('osm')">Mapa</div>
+      <div class="lbtn" id="lHyb" onclick="setLayer('hyb')">Híbrido</div>
+    </div>
+
+    <div id="popup">
+      <button id="popClose" onclick="closePopup()">✕</button>
+      <img id="popImg" src="" alt="">
+      <div class="pop-info">
+        <div class="pop-name" id="popName"></div>
+        <div class="pop-row"><span>Lat</span><span id="popLat">—</span></div>
+        <div class="pop-row"><span>Lng</span><span id="popLng">—</span></div>
+        <div class="pop-row"><span>Alt</span><span id="popAlt">—</span></div>
+        <div class="pop-row"><span>Fecha</span><span id="popDate">—</span></div>
+      </div>
+    </div>
+
+    <div id="prog"><div id="progfill"></div></div>
+    <div id="toast"></div>
+  </div>
+</div>
+
+<input type="file" id="fi" accept="image/jpeg,image/jpg" multiple onchange="loadFiles(this.files)">
+
+<script>
+// ═══════════════════════════════════════════
+// EXIF PARSER — solo lee los primeros 64KB
+// ═══════════════════════════════════════════
+function u16(b,o,le){return le?b[o]|(b[o+1]<<8):(b[o]<<8)|b[o+1]}
+function u32(b,o,le){return(le?b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24):(b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0}
+function rat(b,o,le){const n=u32(b,o,le),d=u32(b,o+4,le);return d?n/d:0}
+const TS=[0,1,1,2,4,8,1,1,2,4,8,4,8];
+
+function parseExif(ab){
+  const b=new Uint8Array(ab);
+  if(b[0]!==0xFF||b[1]!==0xD8) return null;
+  let p=2;
+  while(p+4<b.length){
+    if(b[p]!==0xFF) break;
+    const mk=(b[p]<<8)|b[p+1];
+    const sl=(b[p+2]<<8)|b[p+3];
+    if(mk===0xFFE1&&b[p+4]===0x45&&b[p+5]===0x78&&b[p+6]===0x69&&b[p+7]===0x66&&b[p+8]===0){
+      const base=p+10;
+      const le=b[base]===0x49;
+      if(u16(b,base+2,le)!==42) return null;
+      return readIFD(b,base,base+u32(b,base+4,le),le);
+    }
+    p+=2+sl;
+  }
+  return null;
+}
+
+function readIFD(b,base,pos,le){
+  if(pos+2>b.length) return {};
+  const res={};
+  const n=u16(b,pos,le);
+  for(let i=0;i<n;i++){
+    const ep=pos+2+i*12;
+    if(ep+12>b.length) break;
+    const tag=u16(b,ep,le),type=u16(b,ep+2,le),cnt=u32(b,ep+4,le);
+    const ts=(TS[type]||1)*cnt;
+    let vp=ep+8; if(ts>4) vp=base+u32(b,ep+8,le);
+    if(tag===0x8825){
+      Object.assign(res,readGPS(b,base,base+u32(b,ep+8,le),le));
+    } else if((tag===0x9003||tag===0x0132)&&!res.datetime){
+      let s='';
+      for(let k=0;k<Math.min(cnt,24);k++){const c=b[vp+k];if(!c)break;s+=String.fromCharCode(c);}
+      res.datetime=s;
+    }
+  }
+  return res;
+}
+
+function readGPS(b,base,pos,le){
+  if(pos+2>b.length) return {};
+  const r={};
+  const n=u16(b,pos,le);
+  for(let i=0;i<n;i++){
+    const ep=pos+2+i*12;
+    if(ep+12>b.length) break;
+    const tag=u16(b,ep,le),type=u16(b,ep+2,le),cnt=u32(b,ep+4,le);
+    const ts=(TS[type]||1)*cnt;
+    let vp=ep+8; if(ts>4) vp=base+u32(b,ep+8,le);
+    if(tag===1||tag===3) r[tag===1?'latRef':'lngRef']=String.fromCharCode(b[vp]);
+    else if(tag===2||tag===4) r[tag===2?'latDMS':'lngDMS']=[rat(b,vp,le),rat(b,vp+8,le),rat(b,vp+16,le)];
+    else if(tag===6) r.alt=rat(b,vp,le);
+  }
+  if(r.latDMS&&r.lngDMS){
+    const dms=(v,ref)=>{let d=v[0]+v[1]/60+v[2]/3600;if(ref==='S'||ref==='W')d=-d;return d;};
+    r.latitude=dms(r.latDMS,r.latRef||'N');
+    r.longitude=dms(r.lngDMS,r.lngRef||'E');
+  }
+  return r;
+}
+
+// ── Lee EXIF + extrae miniatura embebida, todo desde un slice de 128KB ──
+// Los DJI incluyen siempre una miniatura JPEG dentro del bloque EXIF (IFD1).
+// Así nunca cargamos el JPEG completo de 8MB — solo 128KB por foto.
+function processSlice(file){
+  return new Promise(resolve=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const ab=e.target.result;
+      let exif=null, thumbUrl=null;
+      try { exif=parseExif(ab); } catch(_) {}
+      try { thumbUrl=extractEmbeddedThumb(ab); } catch(_) {}
+      resolve({exif, thumbUrl});
+    };
+    reader.onerror=()=>resolve({exif:null,thumbUrl:null});
+    reader.readAsArrayBuffer(file.slice(0,131072));
+  });
+}
+
+// Busca el JPEG de miniatura en IFD1 (tags 0x0201 / 0x0202)
+function extractEmbeddedThumb(ab){
+  const b=new Uint8Array(ab);
+  if(b[0]!==0xFF||b[1]!==0xD8) return null;
+  let p=2;
+  while(p+4<b.length){
+    if(b[p]!==0xFF) break;
+    const mk=(b[p]<<8)|b[p+1];
+    const sl=(b[p+2]<<8)|b[p+3];
+    if(mk===0xFFE1&&b[p+4]===0x45&&b[p+5]===0x78&&b[p+6]===0x69&&b[p+7]===0x66&&b[p+8]===0){
+      const base=p+10;
+      const le=b[base]===0x49;
+      if(u16(b,base+2,le)!==42) return null;
+      // Saltar IFD0 para llegar a IFD1
+      const ifd0pos=base+u32(b,base+4,le);
+      const ifd0n=u16(b,ifd0pos,le);
+      const ifd1ptrPos=ifd0pos+2+ifd0n*12;
+      if(ifd1ptrPos+4>b.length) return null;
+      const ifd1off=u32(b,ifd1ptrPos,le);
+      if(!ifd1off) return null;
+      const ifd1pos=base+ifd1off;
+      if(ifd1pos+2>b.length) return null;
+      const ifd1n=u16(b,ifd1pos,le);
+      let thumbOff=0, thumbLen=0;
+      for(let i=0;i<ifd1n;i++){
+        const ep=ifd1pos+2+i*12;
+        if(ep+12>b.length) break;
+        const tag=u16(b,ep,le);
+        if(tag===0x0201) thumbOff=u32(b,ep+8,le);
+        if(tag===0x0202) thumbLen=u32(b,ep+8,le);
+      }
+      if(thumbOff&&thumbLen){
+        const abs=base+thumbOff;
+        if(abs+thumbLen<=b.length){
+          const blob=new Blob([b.slice(abs,abs+thumbLen)],{type:'image/jpeg'});
+          return URL.createObjectURL(blob);
+        }
+      }
+      return null;
+    }
+    p+=2+sl;
+  }
+  return null;
+}
+
+// Convierte objectURL de miniatura → dataURL pequeño y libera el objectURL
+function thumbToDataUrl(url,maxSize=80){
+  return new Promise(resolve=>{
+    if(!url){resolve(null);return;}
+    const img=new Image();
+    img.onload=()=>{
+      const cvs=document.createElement('canvas');
+      const sc=Math.min(maxSize/img.width,maxSize/img.height,1);
+      cvs.width=Math.round(img.width*sc)||maxSize;
+      cvs.height=Math.round(img.height*sc)||maxSize;
+      cvs.getContext('2d').drawImage(img,0,0,cvs.width,cvs.height);
+      URL.revokeObjectURL(url);
+      resolve(cvs.toDataURL('image/jpeg',0.72));
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);resolve(null);};
+    img.src=url;
+  });
+}
+
+// ═══════════════════════════════════════════
+// MAPA (OpenLayers)
+// ═══════════════════════════════════════════
+const satLayer = new ol.layer.Tile({
+  source: new ol.source.XYZ({
+    url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attributions:'© Esri, Maxar, Earthstar Geographics',
+    maxZoom:19
+  }), visible:false
+});
+
+const osmLayer = new ol.layer.Tile({
+  source: new ol.source.OSM(), visible:true
+});
+
+// Capa de etiquetas para modo híbrido (sobre satélite)
+const labelsLayer = new ol.layer.Tile({
+  source: new ol.source.XYZ({
+    url:'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    attributions:'© Esri',
+    maxZoom:19
+  }), visible:false, zIndex:5
+});
+
+const vectorSource = new ol.source.Vector();
+const vectorLayer  = new ol.layer.Vector({
+  source: vectorSource,
+  zIndex:10,
+  style: (feature) => {
+    const sel = feature.get('idx') === selIdx;
+    return new ol.style.Style({
+      image: new ol.style.Circle({
+        radius: sel ? 10 : 7,
+        fill: new ol.style.Fill({ color: sel ? '#00e5a0' : 'rgba(0,229,160,0.82)' }),
+        stroke: new ol.style.Stroke({ color: sel ? '#fff' : 'rgba(255,255,255,0.4)', width: sel ? 2 : 1 })
+      }),
+      text: sel ? new ol.style.Text({
+        text: String(feature.get('idx')+1),
+        font: 'bold 9px monospace',
+        fill: new ol.style.Fill({color:'#000'})
+      }) : null
+    });
+  }
+});
+
+const map = new ol.Map({
+  target: 'map',
+  layers: [osmLayer, satLayer, labelsLayer, vectorLayer],
+  view: new ol.View({ center: ol.proj.fromLonLat([-3.7,40.4]), zoom: 6 }),
+  controls: ol.control.defaults.defaults({ attribution:true, zoom:true, rotate:false })
+});
+
+let currentLayer = 'osm';
+function setLayer(type){
+  currentLayer=type;
+  osmLayer.setVisible(type==='osm');
+  satLayer.setVisible(type==='sat'||type==='hyb');
+  labelsLayer.setVisible(type==='hyb');
+  document.querySelectorAll('.lbtn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('l'+type.charAt(0).toUpperCase()+type.slice(1)).classList.add('active');
+}
+// Layer buttons are correctly id'd in HTML
+
+// Click en mapa para seleccionar punto
+map.on('click', evt=>{
+  const feat = map.forEachFeatureAtPixel(evt.pixel, f=>f, {hitTolerance:8});
+  if (feat) {
+    selectPhoto(feat.get('idx'), false);
+  } else {
+    closePopup();
+  }
+});
+
+// Cursor pointer al pasar sobre puntos
+map.on('pointermove', evt=>{
+  const hit = map.hasFeatureAtPixel(evt.pixel, {hitTolerance:8});
+  map.getTargetElement().style.cursor = hit ? 'pointer' : '';
+});
+
+// ═══════════════════════════════════════════
+// ESTADO
+// ═══════════════════════════════════════════
+let photos=[], filtered=[], selIdx=-1;
+
+// ═══════════════════════════════════════════
+// CARGA DE ARCHIVOS — lotes paralelos de 8
+// ═══════════════════════════════════════════
+async function loadFiles(fileList){
+  const files=Array.from(fileList).filter(f=>/jpe?g/i.test(f.type))
+    .filter(f=>!photos.some(p=>p.name===f.name&&p.size===f.size));
+  if(!files.length) return;
+
+  showProgress(true);
+  const fill=document.getElementById('progfill');
+  const BATCH=8;
+  let done=0;
+
+  for(let i=0;i<files.length;i+=BATCH){
+    const batch=files.slice(i,i+BATCH);
+
+    // 1. Leer slices en paralelo (solo 128KB por foto)
+    const slices=await Promise.all(batch.map(f=>processSlice(f)));
+
+    // 2. Convertir miniaturas embebidas a dataURL en paralelo
+    const thumbs=await Promise.all(slices.map(s=>thumbToDataUrl(s.thumbUrl)));
+
+    // 3. Guardar resultados
+    batch.forEach((f,j)=>{
+      const {exif}=slices[j];
+      const thumb=thumbs[j];
+      const hasGps=!!(exif&&exif.latitude!=null&&isFinite(exif.latitude)&&exif.longitude!=null&&isFinite(exif.longitude));
+      photos.push({
+        name:f.name, size:f.size, thumb,
+        lat: hasGps?exif.latitude:null,
+        lng: hasGps?exif.longitude:null,
+        alt: exif?.alt??null,
+        date:exif?.datetime??null,
+        hasGps
+      });
+    });
+
+    done+=batch.length;
+    fill.style.width=Math.round(done/files.length*100)+'%';
+
+    // Actualizar UI cada lote para feedback visual inmediato
+    filtered=[...photos];
+    renderList();
+    updateStats();
+    // Ceder el hilo al navegador entre lotes
+    await new Promise(r=>setTimeout(r,0));
+  }
+
+  fill.style.width='100%';
+  setTimeout(()=>showProgress(false),400);
+
+  filtered=[...photos];
+  document.getElementById('filterInput').value='';
+  rebuildFeatures();
+  renderList();
+  updateStats();
+  document.getElementById('fi').value='';
+}
+
+// ═══════════════════════════════════════════
+// FEATURES EN EL MAPA
+// ═══════════════════════════════════════════
+function rebuildFeatures(){
+  vectorSource.clear();
+  const features=[];
+  photos.forEach((p,idx)=>{
+    if(!p.hasGps) return;
+    const f=new ol.Feature({ geometry: new ol.geom.Point(ol.proj.fromLonLat([p.lng,p.lat])), idx });
+    features.push(f);
+  });
+  vectorSource.addFeatures(features);
+
+  if(features.length>0){
+    document.getElementById('dropOverlay').classList.add('gone');
+    document.getElementById('layerSw').style.display='';
+
+    // Zoom al extent de todos los puntos
+    const ext=vectorSource.getExtent();
+    if(features.length===1){
+      map.getView().animate({center:features[0].getGeometry().getCoordinates(), zoom:17, duration:600});
+    } else {
+      map.getView().fit(ext,{padding:[60,60,60,60],duration:600,maxZoom:18});
+    }
+  }
+}
+
+function refreshFeatureStyles(){
+  vectorSource.getFeatures().forEach(f=>f.changed());
+  vectorLayer.changed();
+}
+
+// ═══════════════════════════════════════════
+// LISTA LATERAL
+// ═══════════════════════════════════════════
+function renderList(){
+  const el=document.getElementById('photoList');
+  if(!filtered.length){
+    el.innerHTML=`<div class="empty">${photos.length?'Sin resultados':'Arrastra fotos JPG al mapa<br>o usa "Añadir fotos"'}</div>`;
+    return;
+  }
+  el.innerHTML=filtered.map(p=>{
+    const ri=photos.indexOf(p);
+    const thumb=p.thumb?`<img class="thumb" src="${p.thumb}">`:`<div class="thumb" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:18px">📷</div>`;
+    return `<div class="pitem ${ri===selIdx?'sel':''} ${p.hasGps?'':'nogps'}" onclick="selectPhoto(${ri},true)">
+      ${thumb}
+      <div class="pi">
+        <div class="pn" title="${esc(p.name)}">${esc(p.name)}</div>
+        <div class="pc">${p.hasGps?p.lat.toFixed(5)+', '+p.lng.toFixed(5):'Sin GPS'}</div>
+      </div>
+      <span class="badge ${p.hasGps?'ok':'no'}">${p.hasGps?'GPS':'N/A'}</span>
+    </div>`;
+  }).join('');
+}
+
+function filterList(q){
+  filtered=photos.filter(p=>p.name.toLowerCase().includes(q.toLowerCase()));
+  renderList();
+}
+
+// ═══════════════════════════════════════════
+// SELECCIÓN
+// ═══════════════════════════════════════════
+function selectPhoto(idx, panMap=true){
+  selIdx=idx;
+  renderList();
+  refreshFeatureStyles();
+  const p=photos[idx];
+  showPopup(p, idx);
+  if(panMap&&p.hasGps){
+    map.getView().animate({center:ol.proj.fromLonLat([p.lng,p.lat]),duration:400,zoom:Math.max(map.getView().getZoom(),17)});
+  }
+  // Scroll en lista
+  const items=document.querySelectorAll('.pitem');
+  const fi=filtered.indexOf(p);
+  if(fi>=0&&items[fi]) items[fi].scrollIntoView({block:'nearest'});
+}
+
+// ═══════════════════════════════════════════
+// POPUP
+// ═══════════════════════════════════════════
+function showPopup(p, idx){
+  const pop=document.getElementById('popup');
+  pop.style.display='block';
+  document.getElementById('popImg').src=p.thumb||'';
+  document.getElementById('popName').textContent=p.name;
+  document.getElementById('popLat').textContent=p.lat!=null?p.lat.toFixed(6):'—';
+  document.getElementById('popLng').textContent=p.lng!=null?p.lng.toFixed(6):'—';
+  document.getElementById('popAlt').textContent=p.alt!=null?p.alt.toFixed(1)+' m':'—';
+  document.getElementById('popDate').textContent=p.date?p.date.replace(/^(\d{4}):(\d{2}):(\d{2})/,'$1-$2-$3').slice(0,10):'—';
+
+  // Posicionar popup cerca del punto en el mapa
+  if(p.hasGps){
+    const px=map.getPixelFromCoordinate(ol.proj.fromLonLat([p.lng,p.lat]));
+    if(px){
+      const mw=document.getElementById('mapWrap');
+      let left=px[0]+14, top=px[1]-60;
+      if(left+200>mw.clientWidth) left=px[0]-214;
+      if(top<10) top=10;
+      pop.style.left=left+'px'; pop.style.top=top+'px';
+      pop.style.right=''; 
+    }
+  }
+}
+
+function closePopup(){
+  document.getElementById('popup').style.display='none';
+  selIdx=-1;
+  renderList();
+  refreshFeatureStyles();
+}
+
+// ═══════════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════════
+function updateStats(){
+  const tot=photos.length, g=photos.filter(p=>p.hasGps).length;
+  document.getElementById('sTotal').textContent=tot;
+  document.getElementById('sGps').textContent=g;
+  document.getElementById('sNoGps').textContent=tot-g;
+  document.getElementById('btnKml').disabled=g===0;
+  document.getElementById('btnCsv').disabled=g===0;
+  document.getElementById('btnClear').style.display=tot>0?'':'none';
+}
+
+// ═══════════════════════════════════════════
+// EXPORT KML
+// ═══════════════════════════════════════════
+function exportKML(){
+  const gps=photos.filter(p=>p.hasGps);
+  if(!gps.length) return;
+  const marks=gps.map(p=>{
+    const d=p.date?p.date.replace(/^(\d{4}):(\d{2}):(\d{2})/,'$1-$2-$3'):'';
+    const desc=[d&&'Fecha: '+d, p.alt!=null&&'Altitud: '+p.alt.toFixed(1)+' m','Archivo: '+p.name].filter(Boolean).join('\n');
+    return `  <Placemark>
+    <name>${xmle(p.name)}</name>
+    <description>${xmle(desc)}</description>
+    <styleUrl>#s</styleUrl>
+    <Point>
+      <altitudeMode>relativeToGround</altitudeMode>
+      <coordinates>${p.lng.toFixed(7)},${p.lat.toFixed(7)},${p.alt!=null?p.alt.toFixed(1):'0'}</coordinates>
+    </Point>
+  </Placemark>`;
+  }).join('\n');
+  const kml=`<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Drone Image Locator — ${new Date().toLocaleDateString('es-ES')}</name>
+  <description>${gps.length} puntos con GPS</description>
+  <Style id="s">
+    <IconStyle><color>ff00e5a0</color><scale>0.9</scale>
+      <Icon><href>http://maps.google.com/mapfiles/kml/shapes/camera.png</href></Icon>
+    </IconStyle>
+    <LabelStyle><scale>0.7</scale></LabelStyle>
+  </Style>
+${marks}
+</Document>
+</kml>`;
+  triggerDownload(new Blob([kml],{type:'application/vnd.google-earth.kml+xml'}), `inspeccion_${isoDate()}.kml`);
+  toast(`KML exportado — ${gps.length} puntos`);
+}
+
+// ═══════════════════════════════════════════
+// EXPORT CSV
+// ═══════════════════════════════════════════
+function exportCSV(){
+  const gps=photos.filter(p=>p.hasGps);
+  if(!gps.length) return;
+  const header='nombre,latitud,longitud,altitud_m,fecha';
+  const rows=gps.map(p=>{
+    const d=p.date?p.date.replace(/^(\d{4}):(\d{2}):(\d{2})/,'$1-$2-$3').slice(0,10):'';
+    return [csvq(p.name),p.lat.toFixed(7),p.lng.toFixed(7),p.alt!=null?p.alt.toFixed(1):'',d].join(',');
+  });
+  triggerDownload(new Blob([[header,...rows].join('\n')],{type:'text/csv;charset=utf-8'}), `inspeccion_${isoDate()}.csv`);
+  toast(`CSV exportado — ${gps.length} filas`);
+}
+
+// ═══════════════════════════════════════════
+// LIMPIAR
+// ═══════════════════════════════════════════
+function clearAll(){
+  photos=[]; filtered=[]; selIdx=-1;
+  vectorSource.clear();
+  closePopup();
+  document.getElementById('dropOverlay').classList.remove('gone');
+  document.getElementById('filterInput').value='';
+  updateStats();
+  renderList();
+  map.getView().animate({center:ol.proj.fromLonLat([-3.7,40.4]),zoom:6,duration:500});
+}
+
+// ═══════════════════════════════════════════
+// DRAG & DROP
+// ═══════════════════════════════════════════
+const mw=document.getElementById('mapWrap');
+mw.addEventListener('dragover',e=>{ e.preventDefault(); document.getElementById('dropOverlay').classList.add('drag'); });
+mw.addEventListener('dragleave',e=>{ if(!mw.contains(e.relatedTarget)) document.getElementById('dropOverlay').classList.remove('drag'); });
+mw.addEventListener('drop',e=>{ e.preventDefault(); document.getElementById('dropOverlay').classList.remove('drag'); loadFiles(e.dataTransfer.files); });
+
+// ═══════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function xmle(s){return esc(s)}
+function csvq(s){return s.includes(',')?`"${s}"`:s}
+function isoDate(){return new Date().toISOString().slice(0,10)}
+
+function triggerDownload(blob,name){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+function showProgress(v){
+  const p=document.getElementById('prog');
+  p.style.display=v?'block':'none';
+  if(v) document.getElementById('progfill').style.width='0%';
+}
+
+let toastTimer;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
+}
+</script>
+</body>
+</html>
